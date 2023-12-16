@@ -27,12 +27,12 @@
 
 /************************* WiFi Access Point *********************************/
 
-#define WLAN_SSID "616"
-#define WLAN_PASS "10101019"
+#define WLAN_SSID ""
+#define WLAN_PASS ""
 
 /************************* Adafruit.io Setup *********************************/
 
-#define AIO_SERVER      "uc8838d8.ala.cn-hangzhou.emqxsl.cn"
+#define AIO_SERVER      ""
 
 // Using port 8883 for MQTTS
 #define AIO_SERVERPORT  8883
