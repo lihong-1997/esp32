@@ -22,17 +22,16 @@
 #include "Adafruit_MQTT.h"
 #include "Adafruit_MQTT_Client.h"
 #include <ArduinoJson.h>
-#include <FreeRTOS.h>
-#include <task.h>
+//#include <Arduino_FreeRTOS.h>
 
 /************************* WiFi Access Point *********************************/
 
-#define WLAN_SSID ""
-#define WLAN_PASS ""
+#define WLAN_SSID "616"
+#define WLAN_PASS "10101019"
 
 /************************* Adafruit.io Setup *********************************/
 
-#define AIO_SERVER      ""
+#define AIO_SERVER      "uc8838d8.ala.cn-hangzhou.emqxsl.cn"
 
 // Using port 8883 for MQTTS
 #define AIO_SERVERPORT  8883
@@ -116,21 +115,110 @@ const int dacPin25 = 25;
 const int dacPin26 = 26;
 
 // 全局变量
-int memoryLoadValue;
-int cpuLoadValue;
-int cpuTempValue;
-int gpuLoadValue;
-int gpuTempValue;
+int memoryLoadValue = 0;
+int cpuLoadValue = 0;
+int cpuTempValue = 0;
+int gpuLoadValue = 0;
+int gpuTempValue = 0;
 
+int preMemoryLoadValue = 0;
+int preCpuLoadValue = 0;
+int preCpuTempValue = 0;
+int preGpuLoadValue = 0;
+int preGpuTempValue = 0;
 unsigned long previousMillis = 0;
-const unsigned long interval = 3000;  // 3秒
+const unsigned long interval = 5000;  // 5s间隔
 /*************************** Sketch Code ************************************/
+// 定义任务句柄
+TaskHandle_t Task1Handle = NULL;
+TaskHandle_t Task2Handle = NULL;
+
+// 定义互斥锁
+SemaphoreHandle_t xMutex;
+// mqtt
+void Task1(void *pvParameters) {
+  while (1) {
+    MQTT_connect();
+    Adafruit_MQTT_Subscribe *subscription;
+    while ((subscription = mqtt.readSubscription(1000))) {
+      if (subscription == &sub) {
+        const char* data = (char *)sub.lastread;
+        // 创建 JSON 缓冲区，大小取决于你的数据大小
+        DynamicJsonDocument doc(1024);
+        DeserializationError error = deserializeJson(doc, data);
+          const char* memoryLoad = doc["memory"]["memory_load_percent"].as<const char*>();
+          const char* cpuLoad = doc["cpu"]["cpu_load_percent"].as<const char*>();
+          const char* cpuTemp = doc["cpu"]["cpu_average_temperature"].as<const char*>();
+          const char* gpuLoad = doc["gpu"]["gpu_load_percent"].as<const char*>();
+          const char* gpuTemp = doc["gpu"]["gpu_core_temperature"].as<const char*>();
+          if (xSemaphoreTake(xMutex, portMAX_DELAY)) {
+            memoryLoadValue = atoi(memoryLoad);
+            cpuLoadValue = atoi(cpuLoad);
+            cpuTempValue = atoi(cpuTemp);
+            gpuLoadValue = atoi(gpuLoad);
+            gpuTempValue = atoi(gpuTemp);
+
+          }
+          xSemaphoreGive(xMutex);
+          
+          int ratio = (int)((float)memoryLoadValue/100.0 * 255);
+          analogWrite(dacPin25, ratio);
+          Serial.print("Hardware Info:");
+          Serial.print(memoryLoadValue);
+          Serial.print(",");
+          Serial.print(cpuLoad);
+          Serial.print(",");
+          Serial.print(cpuTemp);
+          Serial.print(",");
+          Serial.print(gpuLoad);
+          Serial.print(",");
+          Serial.println(gpuTemp);
+      }
+    }
+  }
+}
+
+// 任务2
+void Task2(void *pvParameters) {
+  while (1) {
+  // 获取当前时间
+  unsigned long currentMillis = millis();
+  // 检查值是否变化
+  if (xSemaphoreTake(xMutex, portMAX_DELAY)) {
+    if (memoryLoadValue != preMemoryLoadValue ||
+        cpuLoadValue != preCpuLoadValue ||
+        cpuTempValue != preCpuTempValue ||
+        gpuLoadValue != preGpuLoadValue ||
+        gpuTempValue != preGpuTempValue) {
+        // 如果值变化，更新记录的值和时间
+        analogWrite(ledPin, 10);
+        preMemoryLoadValue = memoryLoadValue;
+        preCpuLoadValue = cpuLoadValue;
+        preCpuTempValue = cpuTempValue;
+        preGpuLoadValue = gpuLoadValue;
+        preGpuTempValue = gpuTempValue;
+        // 释放锁
+        xSemaphoreGive(xMutex);
+        previousMillis = currentMillis;
+    } else {
+      // 直接释放锁
+      xSemaphoreGive(xMutex);
+      // 如果值没有变化，并且时间间隔超过5秒，输出信息
+      if (currentMillis - previousMillis >= interval) {
+        Serial.println("no latest hardware info");
+        // 电压表、LED归零
+        analogWrite(ledPin, 0);
+        analogWrite(dacPin25, 0);
+      }
+    }
+  }
+  vTaskDelay(1000 / portTICK_PERIOD_MS);
+  }
+}
 
 void setup() {
   Serial.begin(115200);
   delay(10);
-
-  Serial.println(F("Adafruit IO MQTTS (SSL/TLS) Example"));
 
   // Connect to WiFi access point.
   Serial.println(); Serial.println();
@@ -146,24 +234,36 @@ void setup() {
     delay(500);
     Serial.print(".");
   }
-  Serial.println();
 
   Serial.println("WiFi connected");
-  Serial.println("IP address: "); Serial.println(WiFi.localIP());
 
   // Set Adafruit IO's root CA
   client.setCACert(adafruitio_root_ca);
   mqtt.subscribe(&sub);
 
   // 初始化LED引脚为输出模式
-  // pinMode(ledPin, OUTPUT);
+  pinMode(ledPin, OUTPUT);
+
   pinMode(dacPin25, OUTPUT);
   analogWrite(dacPin25, 0);
   pinMode(dacPin26, OUTPUT);
   analogWrite(dacPin26, 0);
+
+  // 创建互斥锁
+  xMutex = xSemaphoreCreateMutex();
+
+  // 创建任务1
+  //xTaskCreate(Task1, "Task1", 4096, NULL, 1, &Task1Handle);
+
+  // 创建任务2
+  xTaskCreate(Task2, "Task2", 1024, NULL, 0, &Task2Handle);
+
+  // 开启多线程调度器
+  //vTaskStartScheduler();
+  //xTaskCreatePinnedToCore(Task1, "TaskOne", 4096, NULL, 1, NULL, 0);//TaskOne在 0核心
+    //xTaskCreatePinnedToCore(Task2, "TaskTwo", 4096, NULL, 2, NULL, 1);//TaskOne在 1核心
 }
 
-uint32_t x=0;
 
 void loop() {
   // Ensure the connection to the MQTT server is alive (this will make the first
@@ -176,18 +276,23 @@ void loop() {
       analogWrite(ledPin, 10);
       const char* data = (char *)sub.lastread;
       // 创建 JSON 缓冲区，大小取决于你的数据大小
-      DynamicJsonDocument doc(1024);
+      DynamicJsonDocument doc(512);
       DeserializationError error = deserializeJson(doc, data);
         const char* memoryLoad = doc["memory"]["memory_load_percent"].as<const char*>();
         const char* cpuLoad = doc["cpu"]["cpu_load_percent"].as<const char*>();
         const char* cpuTemp = doc["cpu"]["cpu_average_temperature"].as<const char*>();
         const char* gpuLoad = doc["gpu"]["gpu_load_percent"].as<const char*>();
         const char* gpuTemp = doc["gpu"]["gpu_core_temperature"].as<const char*>();
-        memoryLoadValue = atoi(memoryLoad);
-        cpuLoadValue = atoi(cpuLoad);
-        cpuTempValue = atoi(cpuTemp);
-        gpuLoadValue = atoi(gpuLoad);
-        gpuTempValue = atoi(gpuTemp);
+        if (xSemaphoreTake(xMutex, portMAX_DELAY)) {
+          memoryLoadValue = atoi(memoryLoad);
+          cpuLoadValue = atoi(cpuLoad);
+          cpuTempValue = atoi(cpuTemp);
+          gpuLoadValue = atoi(gpuLoad);
+          gpuTempValue = atoi(gpuTemp);
+
+        }
+        xSemaphoreGive(xMutex);
+        
         int ratio = (int)((float)memoryLoadValue/100.0 * 255);
         analogWrite(dacPin25, ratio);
         Serial.print("Hardware Info:");
@@ -202,11 +307,6 @@ void loop() {
         Serial.println(gpuTemp);
     }
   }
-  // // 没有收到数据
-  // Serial.println("no data");
-
-  // analogWrite(ledPin, 0);
-  // analogWrite(dacPin25, 0);
 }
 
 // Function to connect and reconnect as necessary to the MQTT server.
@@ -234,8 +334,4 @@ void MQTT_connect() {
        }
   }
   Serial.println("MQTT Connected!");
-}
-
-int lerp(int v1, int v2, int d) {
-  return v1 * (1 - d) + v2 * d;
 }
