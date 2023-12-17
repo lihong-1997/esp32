@@ -18,88 +18,39 @@
  **********************************************************************/
 #include <WiFi.h>
 #include <Arduino.h>
+
+#include "mqtt.h"
 #include "WiFiClientSecure.h"
 #include "Adafruit_MQTT.h"
 #include "Adafruit_MQTT_Client.h"
+
 #include <ArduinoJson.h>
-//#include <Arduino_FreeRTOS.h>
+
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+#include "WiFiUser.h"
+
+/************************* OLED *********************************/
+ 
+#define SCREEN_WIDTH 128 // 使用 128×32 OLED 显示屏
+#define SCREEN_HEIGHT 32 // 
+// I2C 通信协议
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
 /************************* WiFi Access Point *********************************/
-
 #define WLAN_SSID "616"
 #define WLAN_PASS "10101019"
 
-/************************* Adafruit.io Setup *********************************/
 
-#define AIO_SERVER      "uc8838d8.ala.cn-hangzhou.emqxsl.cn"
-
-// Using port 8883 for MQTTS
-#define AIO_SERVERPORT  8883
-
-// Adafruit IO Account Configuration
-// (to obtain these values, visit https://io.adafruit.com and click on Active Key)
-#define AIO_USERNAME "computer"
-#define AIO_KEY      "computer"
-
-/************ Global State (you don't need to change this!) ******************/
+/********************* Global State******************/
 
 // WiFiFlientSecure for SSL/TLS support
 WiFiClientSecure client;
 
 // Setup the MQTT client class by passing in the WiFi client and MQTT server and login details.
 Adafruit_MQTT_Client mqtt(&client, AIO_SERVER, AIO_SERVERPORT, AIO_USERNAME, AIO_KEY);
-
-// io.adafruit.com root CA
-const char* adafruitio_root_ca = \
-      "-----BEGIN CERTIFICATE-----\n"
-      "MIIDrzCCApegAwIBAgIQCDvgVpBCRrGhdWrJWZHHSjANBgkqhkiG9w0BAQUFADBh\n"
-      "MQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYDVQQLExB3\n"
-      "d3cuZGlnaWNlcnQuY29tMSAwHgYDVQQDExdEaWdpQ2VydCBHbG9iYWwgUm9vdCBD\n"
-      "QTAeFw0wNjExMTAwMDAwMDBaFw0zMTExMTAwMDAwMDBaMGExCzAJBgNVBAYTAlVT\n"
-      "MRUwEwYDVQQKEwxEaWdpQ2VydCBJbmMxGTAXBgNVBAsTEHd3dy5kaWdpY2VydC5j\n"
-      "b20xIDAeBgNVBAMTF0RpZ2lDZXJ0IEdsb2JhbCBSb290IENBMIIBIjANBgkqhkiG\n"
-      "9w0BAQEFAAOCAQ8AMIIBCgKCAQEA4jvhEXLeqKTTo1eqUKKPC3eQyaKl7hLOllsB\n"
-      "CSDMAZOnTjC3U/dDxGkAV53ijSLdhwZAAIEJzs4bg7/fzTtxRuLWZscFs3YnFo97\n"
-      "nh6Vfe63SKMI2tavegw5BmV/Sl0fvBf4q77uKNd0f3p4mVmFaG5cIzJLv07A6Fpt\n"
-      "43C/dxC//AH2hdmoRBBYMql1GNXRor5H4idq9Joz+EkIYIvUX7Q6hL+hqkpMfT7P\n"
-      "T19sdl6gSzeRntwi5m3OFBqOasv+zbMUZBfHWymeMr/y7vrTC0LUq7dBMtoM1O/4\n"
-      "gdW7jVg/tRvoSSiicNoxBN33shbyTApOB6jtSj1etX+jkMOvJwIDAQABo2MwYTAO\n"
-      "BgNVHQ8BAf8EBAMCAYYwDwYDVR0TAQH/BAUwAwEB/zAdBgNVHQ4EFgQUA95QNVbR\n"
-      "TLtm8KPiGxvDl7I90VUwHwYDVR0jBBgwFoAUA95QNVbRTLtm8KPiGxvDl7I90VUw\n"
-      "DQYJKoZIhvcNAQEFBQADggEBAMucN6pIExIK+t1EnE9SsPTfrgT1eXkIoyQY/Esr\n"
-      "hMAtudXH/vTBH1jLuG2cenTnmCmrEbXjcKChzUyImZOMkXDiqw8cvpOp/2PV5Adg\n"
-      "06O/nVsJ8dWO41P0jmP6P6fbtGbfYmbW0W5BjfIttep3Sp+dWOIrWcBAI+0tKIJF\n"
-      "PnlUkiaY4IBIqDfv8NZ5YBberOgOzW6sRBc4L0na4UU+Krk2U886UAb3LujEV0ls\n"
-      "YSEY1QSteDwsOoBrp+uvFRTp2InBuThs4pFsiv9kuXclVzDAGySj4dzp30d8tbQk\n"
-      "CAUw7C29C79Fv1C5qfPrmAESrciIxpg0X40KPMbp1ZWVbd4=\n"
-      "-----END CERTIFICATE-----\n"
-      "-----BEGIN CERTIFICATE-----\n"
-      "MIIEqjCCA5KgAwIBAgIQAnmsRYvBskWr+YBTzSybsTANBgkqhkiG9w0BAQsFADBh\n"
-      "MQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYDVQQLExB3\n"
-      "d3cuZGlnaWNlcnQuY29tMSAwHgYDVQQDExdEaWdpQ2VydCBHbG9iYWwgUm9vdCBD\n"
-      "QTAeFw0xNzExMjcxMjQ2MTBaFw0yNzExMjcxMjQ2MTBaMG4xCzAJBgNVBAYTAlVT\n"
-      "MRUwEwYDVQQKEwxEaWdpQ2VydCBJbmMxGTAXBgNVBAsTEHd3dy5kaWdpY2VydC5j\n"
-      "b20xLTArBgNVBAMTJEVuY3J5cHRpb24gRXZlcnl3aGVyZSBEViBUTFMgQ0EgLSBH\n"
-      "MTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBALPeP6wkab41dyQh6mKc\n"
-      "oHqt3jRIxW5MDvf9QyiOR7VfFwK656es0UFiIb74N9pRntzF1UgYzDGu3ppZVMdo\n"
-      "lbxhm6dWS9OK/lFehKNT0OYI9aqk6F+U7cA6jxSC+iDBPXwdF4rs3KRyp3aQn6pj\n"
-      "pp1yr7IB6Y4zv72Ee/PlZ/6rK6InC6WpK0nPVOYR7n9iDuPe1E4IxUMBH/T33+3h\n"
-      "yuH3dvfgiWUOUkjdpMbyxX+XNle5uEIiyBsi4IvbcTCh8ruifCIi5mDXkZrnMT8n\n"
-      "wfYCV6v6kDdXkbgGRLKsR4pucbJtbKqIkUGxuZI2t7pfewKRc5nWecvDBZf3+p1M\n"
-      "pA8CAwEAAaOCAU8wggFLMB0GA1UdDgQWBBRVdE+yck/1YLpQ0dfmUVyaAYca1zAf\n"
-      "BgNVHSMEGDAWgBQD3lA1VtFMu2bwo+IbG8OXsj3RVTAOBgNVHQ8BAf8EBAMCAYYw\n"
-      "HQYDVR0lBBYwFAYIKwYBBQUHAwEGCCsGAQUFBwMCMBIGA1UdEwEB/wQIMAYBAf8C\n"
-      "AQAwNAYIKwYBBQUHAQEEKDAmMCQGCCsGAQUFBzABhhhodHRwOi8vb2NzcC5kaWdp\n"
-      "Y2VydC5jb20wQgYDVR0fBDswOTA3oDWgM4YxaHR0cDovL2NybDMuZGlnaWNlcnQu\n"
-      "Y29tL0RpZ2lDZXJ0R2xvYmFsUm9vdENBLmNybDBMBgNVHSAERTBDMDcGCWCGSAGG\n"
-      "/WwBAjAqMCgGCCsGAQUFBwIBFhxodHRwczovL3d3dy5kaWdpY2VydC5jb20vQ1BT\n"
-      "MAgGBmeBDAECATANBgkqhkiG9w0BAQsFAAOCAQEAK3Gp6/aGq7aBZsxf/oQ+TD/B\n"
-      "SwW3AU4ETK+GQf2kFzYZkby5SFrHdPomunx2HBzViUchGoofGgg7gHW0W3MlQAXW\n"
-      "M0r5LUvStcr82QDWYNPaUy4taCQmyaJ+VB+6wxHstSigOlSNF2a6vg4rgexixeiV\n"
-      "4YSB03Yqp2t3TeZHM9ESfkus74nQyW7pRGezj+TC44xCagCQQOzzNmzEAP2SnCrJ\n"
-      "sNE2DpRVMnL8J6xBRdjmOsC3N6cQuKuRXbzByVBjCqAA8t1L0I+9wXJerLPyErjy\n"
-      "rMKWaBFLmfK/AHNF4ZihwPGOc7w6UHczBZXH5RFzJNnww+WnKuTPI0HfnVH8lg==\n"
-      "-----END CERTIFICATE-----\n";
 
 /****************************** Feeds ***************************************/
 
@@ -108,11 +59,15 @@ const char* adafruitio_root_ca = \
 // Adafruit_MQTT_Publish test = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/test");
 Adafruit_MQTT_Subscribe sub = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/hardware/info");
 
-/****************************** Led ***************************************/
+/****************************** PIN ***************************************/
 // 定义LED连接的引脚
 const int ledPin = 23;
+const int sclPin = 22;
+const int sdaPin = 21;
 const int dacPin25 = 25;
 const int dacPin26 = 26;
+
+const int resetPin = 13;
 
 // 全局变量
 int memoryLoadValue = 0;
@@ -209,6 +164,7 @@ void Task2(void *pvParameters) {
         // 电压表、LED归零
         analogWrite(ledPin, 0);
         analogWrite(dacPin25, 0);
+        analogWrite(dacPin26, 0);
       }
     }
   }
@@ -216,26 +172,49 @@ void Task2(void *pvParameters) {
   }
 }
 
+void oled_set(const char* val) {
+    display.clearDisplay();// 清除显示
+    display.setTextSize(2);// 设置文本大小
+    display.setTextColor(WHITE);// 设置文本颜色
+    display.setCursor(0, 0);//设置显示坐标
+    display.println("RAM Load:");
+    display.print(val);// 
+    display.print("%");
+    display.print(" <Linux");
+    display.display(); // 屏幕上实际显示文本
+}
+
 void setup() {
   Serial.begin(115200);
   delay(10);
 
+  Serial.println("1.OLED初始化...");
+  while(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C))
+   { 
+    Serial.println("SSD1306 allocation failed");
+    delay(1000);
+  }
+  Serial.println("1.OLED初始化成功");
+  display.clearDisplay();// 清除显示
+  display.setTextSize(2);// 设置文本大小
+  display.setTextColor(WHITE);// 设置文本颜色
+  display.setCursor(0, 0);//设置显示坐标
+  display.println("ready");// 
+  display.display(); // 屏幕上实际显示文本
+
   // Connect to WiFi access point.
-  Serial.println(); Serial.println();
+  Serial.println("2.WiFi连接中..."); 
   Serial.print("Connecting to ");
   Serial.println(WLAN_SSID);
-
   delay(1000);
-
-  WiFi.begin(WLAN_SSID, WLAN_PASS);
+  WiFi.begin(); //从nvs读取
   delay(2000);
 
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
   }
-
-  Serial.println("WiFi connected");
+  Serial.println("2.WiFi连接成功");
 
   // Set Adafruit IO's root CA
   client.setCACert(adafruitio_root_ca);
@@ -243,7 +222,9 @@ void setup() {
 
   // 初始化LED引脚为输出模式
   pinMode(ledPin, OUTPUT);
-
+  // 重置初始化操作
+  pinMode(resetPin, INPUT);
+  // 初始化电压表
   pinMode(dacPin25, OUTPUT);
   analogWrite(dacPin25, 0);
   pinMode(dacPin26, OUTPUT);
@@ -269,6 +250,17 @@ void loop() {
   // Ensure the connection to the MQTT server is alive (this will make the first
   // connection and automatically reconnect when disconnected).  See the MQTT_connect
   // function definition further below.
+  // 由 resetPin 引脚值，判断用户是否发起重新配置信息操作,需长按5s.
+  if (digitalRead(resetPin)) {
+    delay(5000);
+    if (digitalRead(resetPin)) {
+      Serial.println("正在清除当前配置信息...");
+      WiFi.disconnect(true); // 清除WiFi连接信息
+      // todo:清除用户信息
+      delay(500);
+      ESP.restart(); // //重启复位esp32,设置AP模式
+    }
+  }
   MQTT_connect();
   Adafruit_MQTT_Subscribe *subscription;
   while ((subscription = mqtt.readSubscription(1000))) {
@@ -292,9 +284,14 @@ void loop() {
 
         }
         xSemaphoreGive(xMutex);
-        
-        int ratio = (int)((float)memoryLoadValue/100.0 * 255);
-        analogWrite(dacPin25, ratio);
+
+        int wifiMode = digitalRead(resetPin);
+        Serial.println(wifiMode);
+        int cpuLoadRatio = (int)((float)cpuLoadValue/100.0 * 255);
+        int cpuTempRatio = (int)((float)cpuTempValue/100.0 * 255);
+        analogWrite(dacPin25, cpuLoadRatio);
+        analogWrite(dacPin26, cpuTempRatio);
+        oled_set(memoryLoad);
         Serial.print("Hardware Info:");
         Serial.print(memoryLoadValue);
         Serial.print(",");
@@ -319,7 +316,7 @@ void MQTT_connect() {
     return;
   }
 
-  Serial.print("Connecting to MQTT... ");
+  Serial.println("3.MQTT服务器连接中...");
 
   uint8_t retries = 3;
   while ((ret = mqtt.connect()) != 0) { // connect will return 0 for connected
@@ -333,5 +330,5 @@ void MQTT_connect() {
          while (1);
        }
   }
-  Serial.println("MQTT Connected!");
+  Serial.println("3.MQTT服务器连接成功");
 }
