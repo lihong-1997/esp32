@@ -27,10 +27,9 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);// 采用 I2C �
 
 #define WLAN_SSID "616"
 #define WLAN_PASS "10101019"
-
 int connectTimeOut_s = 10;    //WiFi连接超时时间，单位秒
 
-/********************* Global State******************/
+/******************************** MQTT  *****************************/
 
 // WiFiFlientSecure for SSL/TLS support
 WiFiClientSecure client;
@@ -38,11 +37,8 @@ WiFiClientSecure client;
 // Setup the MQTT client class by passing in the WiFi client and MQTT server and login details.
 Adafruit_MQTT_Client mqtt(&client, AIO_SERVER, AIO_SERVERPORT, AIO_USERNAME, AIO_KEY);
 
-/****************************** Feeds ***************************************/
-
-// Setup a feed called 'test' for publishing.
+// Setup a feed called '/hardware/info' for subscribe.
 // Notice MQTT paths for AIO follow the form: <username>/feeds/<feedname>
-// Adafruit_MQTT_Publish test = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/test");
 Adafruit_MQTT_Subscribe sub = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/hardware/info");
 
 /****************************** PIN ***************************************/
@@ -52,9 +48,8 @@ const int sclPin = 22;
 const int sdaPin = 21;
 const int dacPin25 = 25;
 const int dacPin26 = 26;
-
 const int switch1Pin = 12;
-
+const int switch2Pin = 14;
 const int resetPin = 13;
 
 // 全局变量
@@ -76,6 +71,8 @@ int preGpuLoadValue = 0;
 int preGpuTempValue = 0;
 unsigned long previousMillis = 0;
 const unsigned long interval = 5000;  // 5s间隔
+
+int wifiStatus;
 /*************************** Sketch Code ************************************/
 // 定义任务句柄
 TaskHandle_t Task1Handle = NULL;
@@ -130,27 +127,31 @@ void Task1(void *pvParameters) {
 // 任务2:监视硬件信息是否改变
 void Task2(void *pvParameters) {
   while (1) {
-    xSemaphoreTake(mutex_wifi, portMAX_DELAY);
-    if (WiFi.status() == WL_CONNECTED) {
-        xSemaphoreGive(mutex_wifi);
-        // 获取当前时间
-        unsigned long currentMillis = millis();
-        // 检查值是否变化
-        if (xSemaphoreTake(xMutex, portMAX_DELAY)) {
+    //xSemaphoreTake(mutex_wifi, portMAX_DELAY);
+    if (xSemaphoreTake(mutex_wifi, (TickType_t) 5) == pdTRUE) {
+      wifiStatus = WiFi.status();
+      xSemaphoreGive(mutex_wifi);                 // 释放锁 mutex_wifi
+
+      if (wifiStatus != WL_CONNECTED) {
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
+        continue;
+      }
+      // 连接上wifi
+      unsigned long currentMillis = millis();     // 获取当前时间
+      if (xSemaphoreTake(xMutex, portMAX_DELAY)) {       // 检查硬件值是否变化
           if (memoryLoadValue != preMemoryLoadValue ||
-              cpuLoadValue != preCpuLoadValue ||
-              cpuTempValue != preCpuTempValue ||
-              gpuLoadValue != preGpuLoadValue ||
-              gpuTempValue != preGpuTempValue) {
-              // 如果值变化，更新记录的值和时间
-              analogWrite(ledPin, 10);
+              cpuLoadValue    != preCpuLoadValue    ||
+              cpuTempValue    != preCpuTempValue    ||
+              gpuLoadValue    != preGpuLoadValue    ||
+              gpuTempValue    != preGpuTempValue) {
+              analogWrite(ledPin, 10);// 如果值变化，更新记录的值和时间
               preMemoryLoadValue = memoryLoadValue;
               preCpuLoadValue = cpuLoadValue;
               preCpuTempValue = cpuTempValue;
               preGpuLoadValue = gpuLoadValue;
               preGpuTempValue = gpuTempValue;
-              // 释放锁
-              xSemaphoreGive(xMutex);
+              
+              xSemaphoreGive(xMutex);// 释放锁 xMutex
               previousMillis = currentMillis;
           } else {
             // 直接释放锁
@@ -165,6 +166,8 @@ void Task2(void *pvParameters) {
             }
           }
         }
+    } else {
+      Serial.println("未能获取 WiFi信息 锁");
     }
     vTaskDelay(1000 / portTICK_PERIOD_MS);
   }
@@ -218,12 +221,12 @@ void setup() {
   //xTaskCreate(Task1, "Task1", 4096, NULL, 1, &Task1Handle);
 
   // 创建任务2
-  xTaskCreate(Task2, "Task2", 1024, NULL, 0, &Task2Handle);
+  //xTaskCreate(Task2, "Task2", 1024, NULL, 0, &Task2Handle);
 
   // 开启多线程调度器
   //vTaskStartScheduler();
   //xTaskCreatePinnedToCore(Task1, "TaskOne", 4096, NULL, 1, NULL, 0);//TaskOne在 0核心
-    //xTaskCreatePinnedToCore(Task2, "TaskTwo", 4096, NULL, 2, NULL, 1);//TaskOne在 1核心
+  xTaskCreatePinnedToCore(Task2, "Task2", 1024, NULL, tskIDLE_PRIORITY, &Task2Handle, 0); // 在小核上面运行
 }
 
 
@@ -239,7 +242,7 @@ void loop() {
       // todo:清除用户信息
       xSemaphoreGive(mutex_wifi);
       delay(500);
-      ESP.restart(); // //重启复位esp32,设置AP模式
+      ESP.restart(); //重启复位esp32,设置AP模式
     }
   }
   checkDNS_HTTP();                  //检测客户端DNS&HTTP请求，也就是检查配网页面那部分
@@ -269,8 +272,6 @@ void loop() {
           }
           xSemaphoreGive(xMutex);
 
-            // int wifiMode = digitalRead(resetPin);
-            // Serial.println(wifiMode);
             if (digitalRead(switch1Pin)) { // 占用率
               cpuLoadRatio = (int)((float)cpuLoadValue/100.0 * 255);
               gpuLoadRatio = (int)((float)gpuLoadValue/100.0 * 255);
@@ -283,7 +284,7 @@ void loop() {
               analogWrite(dacPin26, gpuTempRatio);
             }
 
-            oled_set(memoryLoad);
+            oledShowRamLoad(memoryLoad);
             Serial.print("Hardware Info:");
             Serial.print(memoryLoadValue);
             Serial.print(",");
@@ -327,14 +328,14 @@ void MQTT_connect() {
   Serial.println("3.MQTT服务器连接成功");
 }
 
-void oled_set(const char* val) {
-    display.clearDisplay();// 清除显示
+void (const char* val) {
+    display.clearDoledShowRamLoadisplay();// 清除显示
     display.setTextSize(2);// 设置文本大小
     display.setTextColor(WHITE);// 设置文本颜色
     display.setCursor(0, 0);//设置显示坐标
     display.println("RAM Load:");
-    display.print(val);// 
+    display.print(val);
     display.print("%");
-    display.print(" <Linux");
+    display.print(" <Win");
     display.display(); // 屏幕上实际显示文本
 }

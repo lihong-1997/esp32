@@ -9,7 +9,8 @@
 #include <esp_wifi.h>     //用于esp_wifi_restore() 删除保存的wifi信息
  
 extern const char* HOST_NAME;                 //设置设备名
-extern int connectTimeOut_s;                 //WiFi连接超时时间，单位秒
+extern int connectTimeOut_s;                  //WiFi连接超时时间，单位秒
+extern SemaphoreHandle_t mutex_wifi;          //wifi信息锁
  
 //===========需要调用的函数===========
 void checkConnect(bool reConnect);    //检测wifi是否已经连接

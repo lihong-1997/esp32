@@ -3,7 +3,7 @@
 const byte DNS_PORT = 53;                  //设置DNS端口号
 const int webPort = 80;                    //设置Web端口号
  
-const char* AP_SSID  = "ESP32-4_1";        //设置AP热点名称
+const char* AP_SSID  = "Monitor";        //设置AP热点名称
 //const char* AP_PASS  = "";               //这里不设置设置AP热点密码
  
 const char* HOST_NAME = "MY_ESP32";        //设置设备名
@@ -66,7 +66,7 @@ void handleConfigWifi()               //返回http状态
   if (WiFi.status() != WL_CONNECTED)    //wifi没有连接成功
   {
     // todo 重定向至输入界面
-    Serial.println("开始调用连接函数connectToWiFi()..");
+    Serial.println("开始调用WiFi连接函数connectToWiFi()..");
     connectToWiFi(connectTimeOut_s);
   } 
   else {
