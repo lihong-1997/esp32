@@ -130,7 +130,7 @@ void Task1(void *pvParameters) {
 // 任务2:监视硬件信息是否改变
 void Task2(void *pvParameters) {
   while (1) {
-    SemaphoreTake(mutex_wifi, portMAX_DELAY);
+    xSemaphoreTake(mutex_wifi, portMAX_DELAY);
     if (WiFi.status() == WL_CONNECTED) {
         xSemaphoreGive(mutex_wifi);
         // 获取当前时间

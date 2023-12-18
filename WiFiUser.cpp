@@ -243,8 +243,6 @@ void checkConnect(bool reConnect)
 {
   if (WiFi.status() != WL_CONNECTED)           //wifi连接失败
   {
-    // Serial.println("WiFi Mode:");
-    //   Serial.println(WiFi.getMode());
     if (reConnect == true && WiFi.getMode() != WIFI_AP && WiFi.getMode() != WIFI_AP_STA ) 
     {
       Serial.println("WIFI未连接.");
