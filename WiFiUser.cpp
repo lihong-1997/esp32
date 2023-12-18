@@ -16,11 +16,8 @@ String wifi_pass = "";                     //暂时存储wifi账号密码
  
 DNSServer dnsServer;                       //创建dnsServer实例
 WebServer server(webPort);                 //开启web服务, 创建TCP SERVER,参数: 端口号,最大连接数
- 
- 
-/*
- * 处理网站根目录的访问请求
- */
+
+// 处理网站根目录的访问请求
 void handleRoot() 
 {
   if (server.hasArg("selectSSID")) {
@@ -29,10 +26,8 @@ void handleRoot()
     server.send(200, "text/html", ROOT_HTML_1 + scanNetworksID + ROOT_HTML_2);   
   }
 }
- 
-/*
- * 提交数据后的提示页面
- */
+
+// 提交数据后的提示页面
 void handleConfigWifi()               //返回http状态
 {
   if (server.hasArg("ssid"))          //判断是否有账号参数
@@ -78,19 +73,15 @@ void handleConfigWifi()               //返回http状态
     Serial.println("提交的配置信息自动连接成功..");
   }
 }
- 
-/*
- * 处理404情况的函数'handleNotFound'
- */
+
+// 处理404情况的函数'handleNotFound'
 void handleNotFound()           // 当浏览器请求的网络资源无法在服务器找到时通过此自定义函数处理
 {           
   handleRoot();                 //访问不存在目录则返回配置页面
   //   server.send(404, "text/plain", "404: Not found");
 }
- 
-/*
- * 进入AP模式
- */
+
+// 进入AP模式
 void initSoftAP() {
   WiFi.mode(WIFI_AP);                                           //配置为AP模式
   WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));   //设置AP热点IP和子网掩码
@@ -110,10 +101,8 @@ void initSoftAP() {
     ESP.restart();                                      //重启复位esp32
   }
 }
- 
-/*
- * 开启DNS服务器
- */
+
+// 开启DNS服务器
 void initDNS() 
 {
   if (dnsServer.start(DNS_PORT, "*", apIP))   //判断将所有地址映射到esp32的ip上是否成功
@@ -123,10 +112,8 @@ void initDNS()
     Serial.println("start dnsserver failed.");
   }
 }
- 
-/*
- * 初始化WebServer
- */
+
+// 初始化WebServer
 void initWebServer() 
 {
   if (MDNS.begin("esp32"))      //给设备设定域名esp32,完整的域名是esp32.local
@@ -180,23 +167,19 @@ bool scanWiFi() {
  * 连接WiFi
  */
 void connectToWiFi(int timeOut_s) {
-  WiFi.hostname(HOST_NAME);             //设置设备名
-  Serial.println("进入connectToWiFi()函数");
+  WiFi.hostname(HOST_NAME);                   //设置设备名
   //WiFi.mode(WIFI_STA);                        //设置为STA模式并连接WIFI
-  // WiFi.setAutoConnect(false);                  //设置自动连接    
+  //WiFi.setAutoConnect(true);                  //设置自动连接    
   
-  if (wifi_ssid != "")                        //wifi_ssid不为空，意味着从网页读取到wifi
-  {
-    Serial.println("用web配置信息连接.");
+  if (wifi_ssid != "") {                      //wifi_ssid不为空，意味着从网页读取到wifi 
+    Serial.println("正在建立新的连接....");
     WiFi.begin(wifi_ssid.c_str(), wifi_pass.c_str()); //c_str(),获取该字符串的指针
     wifi_ssid = "";
     wifi_pass = "";
-
-  } 
-  else                                        //未从网页读取到wifi
+  } else                                      //未从网页读取到wifi
   {
-    Serial.println("用nvs保存的信息连接.");
-    WiFi.begin("hhh", "111");                             //begin()不传入参数，默认连接上一次连接成功的wifi
+    Serial.println("加载本地WiFi连接...");
+    WiFi.begin();                             //begin()不传入参数，默认连接上一次连接成功的wifi
   }
  
   int Connect_time = 0;                       //用于连接计时，如果长时间连接不成功，复位设备
@@ -208,25 +191,24 @@ void connectToWiFi(int timeOut_s) {
                                        
     if (Connect_time > 2 * timeOut_s)         //长时间连接不上，重新进入配网页面
     { 
-
       Serial.println("");                     //主要目的是为了换行符
-      Serial.println("WIFI autoconnect fail, start AP for webconfig now...");
+      Serial.println("未发现连接配置,开始 AP 配网");
       wifiConfig();                           //开始配网功能
       return;                                 //跳出 防止无限初始化
     }
   }
   
-  if (WiFi.status() == WL_CONNECTED)          //如果连接成功
+  if (WiFi.status() == WL_CONNECTED)          //如果直接连接成功,显示以下信息，重新配置走不到这里
   {
-    Serial.println("WIFI connect Success");
-    Serial.printf("SSID:%s", WiFi.SSID().c_str());
-    Serial.printf(", PSW:%s\r\n", WiFi.psk().c_str());
-    Serial.print("LocalIP:");
-    Serial.print(WiFi.localIP());
-    Serial.print(" ,GateIP:");
-    Serial.println(WiFi.gatewayIP());
-    Serial.print("WIFI status is:");
-    Serial.print(WiFi.status());
+    Serial.println("\nWIFI connect Success");
+    // Serial.printf("SSID:%s", WiFi.SSID().c_str());
+    // Serial.printf(", PSW:%s\r\n", WiFi.psk().c_str());
+    // Serial.print("LocalIP:");
+    // Serial.print(WiFi.localIP());
+    // Serial.print(" ,GateIP:");
+    // Serial.println(WiFi.gatewayIP());
+    // Serial.print("WIFI status is:");
+    // Serial.print(WiFi.status());
     server.stop();                            //停止开发板所建立的网络服务器。
   }
 }
@@ -249,6 +231,7 @@ void wifiConfig()
 void restoreWiFi() {
   delay(500);
   esp_wifi_restore();  //删除保存的wifi信息
+  WiFi.disconnect(true); // 清除WiFi连接信息
   Serial.println("连接信息已清空,准备重启设备..");
   delay(10);
 }
@@ -260,6 +243,8 @@ void checkConnect(bool reConnect)
 {
   if (WiFi.status() != WL_CONNECTED)           //wifi连接失败
   {
+    // Serial.println("WiFi Mode:");
+    //   Serial.println(WiFi.getMode());
     if (reConnect == true && WiFi.getMode() != WIFI_AP && WiFi.getMode() != WIFI_AP_STA ) 
     {
       Serial.println("WIFI未连接.");

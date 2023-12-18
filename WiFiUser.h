@@ -5,8 +5,8 @@
 #include <DNSServer.h>
 #include <WebServer.h>
 #include <ESPmDNS.h>      //用于设备域名 MDNS.begin("esp32")
-#include <esp_wifi.h>     //用于esp_wifi_restore() 删除保存的wifi信息
 #include "html.h"         //用于网页显示
+#include <esp_wifi.h>     //用于esp_wifi_restore() 删除保存的wifi信息
  
 extern const char* HOST_NAME;                 //设置设备名
 extern int connectTimeOut_s;                 //WiFi连接超时时间，单位秒

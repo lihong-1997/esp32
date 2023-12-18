@@ -6,7 +6,7 @@
 <html>\
     <head>\
         <title>ESP32配置</title>\
-        <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\
+        <meta charset=\"UTF-8\" name=\"viewport\" content=\"width=device-width, initial-scale=1\">\
     </head>\
     <style type=\"text/css\">\
         body{font: normal 14px/100% \"Andale Mono\", AndaleMono, monospace;background-color: #4F6877;color: #fff;}\
